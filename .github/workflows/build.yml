@@ -97,6 +97,13 @@ jobs:
           name: ${{ steps.artifact.outputs.filename }}
           path: ./build/distributions/content/*/*
 
+      # Store plugin distribution zip file for releases
+      - name: Upload distribution artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-distribution
+          path: ./build/distributions/*.zip
+
   # Run tests and upload a code coverage report
   test:
     name: Test
@@ -224,10 +231,9 @@ jobs:
           name: pluginVerifier-result
           path: ${{ github.workspace }}/build/reports/pluginVerifier
 
-  # Prepare a draft release for GitHub Releases page for the manual verification
-  # If accepted and published, release workflow would be triggered
-  releaseDraft:
-    name: Release draft
+  # Create and publish release for main branch merges, or create draft for other events
+  release:
+    name: Create Release
     if: github.event_name != 'pull_request'
     needs: [ build, test, inspectCode, verify ]
     runs-on: ubuntu-latest
@@ -239,6 +245,13 @@ jobs:
       - name: Fetch Sources
         uses: actions/checkout@v4
 
+      # Download the built plugin distribution
+      - name: Download Plugin Distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-distribution
+          path: ./distributions
+
       # Remove old release drafts by using the curl request for the available releases with a draft flag
       - name: Remove Old Release Drafts
         env:
@@ -248,15 +261,26 @@ jobs:
             --jq '.[] | select(.draft == true) | .id' \
             | xargs -I '{}' gh api -X DELETE repos/{owner}/{repo}/releases/{}
 
-      # Create a new release draft which is not publicly visible and requires manual acceptance
-      - name: Create Release Draft
+      # Create a published release for main branch pushes, or draft for other branches
+      - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Determine if this should be a draft release or published release
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            DRAFT_FLAG=""
+            echo "Creating published release for main branch"
+          else
+            DRAFT_FLAG="--draft"
+            echo "Creating draft release for non-main branch"
+          fi
+          
+          # Create the release
           gh release create "v${{ needs.build.outputs.version }}" \
-            --draft \
+            $DRAFT_FLAG \
             --title "v${{ needs.build.outputs.version }}" \
             --notes "$(cat << 'EOM'
           ${{ needs.build.outputs.changelog }}
           EOM
-          )"
+          )" \
+            ./distributions/*.zip
