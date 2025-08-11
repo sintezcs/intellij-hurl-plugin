@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Extended compatibility to support JetBrains IDEs up to 2025.2 (PyCharm 2025.2, GoLand 2025.2, etc.)
+
 ## [0.0.3] - 2025-04-27
 
 ### Added
